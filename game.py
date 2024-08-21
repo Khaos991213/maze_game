@@ -1,6 +1,6 @@
 import pygame
 import random
-
+import numpy as np
 # Initialize Pygame
 pygame.init()
 
@@ -17,7 +17,6 @@ RED = (255, 0, 0)
 GRAY = (192, 192, 192)
 BLUE = (0, 0, 255)
 
-# Maze Class
 class Maze:
     def __init__(self, countdown_time=60):
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -29,6 +28,27 @@ class Maze:
         self.player = Player()
         self.timer = Timer(countdown_time)
 
+    def reset(self):
+        self.maze = self.create_maze()
+        self.player = Player()
+        self.timer = Timer(self.timer.countdown_time)
+        return self.get_state()
+
+    def get_state(self):
+        return {
+            'player_position': (self.player.x, self.player.y),
+            'player_score': self.player.score,
+            'remaining_time': self.timer.get_time(),
+            'maze': self.maze  # The maze could be encoded differently for RL use
+        }
+    def get_screen_rgb(self):
+        # Capture the current screen as a NumPy array
+        screen_array = pygame.surfarray.array3d(self.screen)
+        
+        # Transpose array to convert from (width, height, color) to (height, width, color)
+        screen_array = np.transpose(screen_array, (1, 0, 2))
+        
+        return screen_array
     # Create Maze with Points
     def create_maze(self):
         maze = [[0] * MAZE_WIDTH for _ in range(MAZE_HEIGHT)]
@@ -59,7 +79,34 @@ class Maze:
                 elif self.maze[y][x] == 3:
                     pygame.draw.circle(self.screen, BLUE, (x * CELL_SIZE + CELL_SIZE // 2, y * CELL_SIZE + CELL_SIZE // 2), CELL_SIZE // 4)
 
-    # Main loop
+    
+    def step(self, action):
+        # Map action to movement
+        dx, dy = 0, 0
+        if action == 'UP':
+            dx, dy = 0, -1
+        elif action == 'DOWN':
+            dx, dy = 0, 1
+        elif action == 'LEFT':
+            dx, dy = -1, 0
+        elif action == 'RIGHT':
+            dx, dy = 1, 0
+
+        self.player.move(dx, dy, self.maze)
+
+        # Check if the game is won or if time is up
+        done = self.maze[self.player.y][self.player.x] == 2 or self.timer.is_time_up()
+
+        # Calculate reward
+        reward = 1  # Small reward for moving
+        if self.maze[self.player.y][self.player.x] == 3:
+            reward += 10
+        if self.maze[self.player.y][self.player.x] == 2:
+            reward += 100
+
+        state = self.get_state()
+        return state, reward, done
+
     def run(self):
         running = True
         won = False
