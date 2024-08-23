@@ -4,13 +4,15 @@ import numpy as np
 # Initialize Pygame
 pygame.init()
 
+random.seed(42)
+
 # Constants
 SCREEN_WIDTH = 600
 SCREEN_HEIGHT = 650  # Increased height for timer display
 CELL_SIZE = 20
 MAZE_WIDTH = SCREEN_WIDTH // CELL_SIZE
 MAZE_HEIGHT = (SCREEN_HEIGHT - 50) // CELL_SIZE  # Adjusted height for timer display
-WHITE = (255, 255, 222)
+WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 GREEN = (0, 255, 0)
 RED = (255, 0, 0)
@@ -57,7 +59,7 @@ class Maze:
             y = random.randint(0, MAZE_HEIGHT - 1)
             maze[y][x] = 1
         
-        for _ in range(10):  # Randomly add points (incentives)
+        for _ in range(25):  # Randomly add points (incentives)
             while True:
                 x = random.randint(0, MAZE_WIDTH - 1)
                 y = random.randint(0, MAZE_HEIGHT - 1)
@@ -100,9 +102,9 @@ class Maze:
         # Calculate reward
         reward = 1  # Small reward for moving
         if self.maze[self.player.y][self.player.x] == 3:
-            reward += 10
+            reward += 50
         if self.maze[self.player.y][self.player.x] == 2:
-            reward += 100
+            reward += 500
 
         state = self.get_state()
         return state, reward, done
@@ -113,8 +115,6 @@ class Maze:
 
         while running:
             for event in pygame.event.get():
-                print(self.get_screen_rgb())
-                print(self.get_screen_rgb().shape)
                 if event.type == pygame.QUIT:
                     running = False
                 elif event.type == pygame.KEYDOWN:
@@ -131,6 +131,7 @@ class Maze:
             self.draw_maze()
             self.player.draw(self.screen)
             self.timer.draw(self.screen)
+
             # Display the player's score
             score_text = self.font.render(f"Score: {self.player.score}", True, BLACK)
             self.screen.blit(score_text, (SCREEN_WIDTH - 150, 600))
@@ -158,6 +159,9 @@ class Maze:
         pygame.display.flip()
         pygame.time.wait(3000)
         pygame.quit()
+    
+    def close(self):
+        pygame.quit()  # Clean up Pygame resources
 
 # Player class
 class Player:

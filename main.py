@@ -71,8 +71,7 @@ def optimize_model():
     state_action_values = policy_net(state_batch)
     # print("state_action_values shape:", state_action_values.shape)
     
-    # Ensure action_batch is correctly shaped
-    state_action_values = state_action_values.gather(1, action_batch)  # Gather the action values
+    state_action_values = state_action_values.gather(1, action_batch)
 
     next_state_values = torch.zeros(BATCH_SIZE, device=device)
     next_state_values[non_final_mask] = target_net(non_final_next_states).max(1)[0].detach()
@@ -85,6 +84,7 @@ def optimize_model():
     for param in policy_net.parameters():
         param.grad.data.clamp_(-1, 1)
     optimizer.step()
+    return loss.item()
 
 # def get_state(obs, ep, p):
 #     state = np.array(obs)
@@ -145,23 +145,25 @@ def get_state(obs, episode, save_image=False):
 
 
 def train(env, n_episodes, render=False):
+    all_losses = []  # List to store loss values for each episode
+    
     for episode in range(n_episodes):
         obs = env.reset()
         state = get_state(obs, episode, False)
         total_reward = 0.0
+        episode_loss = 0.0  # Initialize loss tracking for this episode
+        
         for t in count():
-            
             action = select_action(state)
 
             if render:
                 env.render()
 
-            obs, reward, done= env.step(action)  # Adjusted for 4 values return
+            obs, reward, done = env.step(action)  # Adjusted for 4 values return
             
             total_reward += reward
 
             if not done:
-                # next_state = get_screen_rgb(env) if not done else None
                 next_state = get_state(obs, episode, False)
             else:
                 next_state = None
@@ -172,15 +174,33 @@ def train(env, n_episodes, render=False):
             state = next_state
 
             if steps_done > INITIAL_MEMORY:
-                optimize_model()
+                loss = optimize_model()
+                if loss is not None:
+                    episode_loss += loss  # Accumulate loss
 
                 if steps_done % TARGET_UPDATE == 0:
                     target_net.load_state_dict(policy_net.state_dict())
 
             if done:
                 break
-        print('Total steps: {} \t Episode: {}/{} \t Total reward: {}'.format(steps_done, episode, t, total_reward))
+        
+        avg_loss = episode_loss / (t + 1) if t > 0 else 0
+        all_losses.append(avg_loss)  # Store the average loss for this episode
+
+        print(f'Episode {episode}/{n_episodes} \t Total steps: {steps_done} \t Total reward: {total_reward} \t Average loss: {avg_loss:.4f}')
+    
     env.close()
+    
+    # Plotting the loss
+    plt.figure(figsize=(10, 5))
+    plt.plot(range(n_episodes), all_losses, label='Average Loss')
+    plt.xlabel('Episode')
+    plt.ylabel('Loss')
+    plt.title('Loss per Episode')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig('loss_per_episode.png')  # Save plot as an image file
+    plt.show()
 
 def test(env, n_episodes, policy, render=True):
     path_array = []
@@ -258,9 +278,9 @@ if __name__ == '__main__':
     memory = ReplayMemory(MEMORY_SIZE)
     
     # Train model
-    train(env, 1001)
+    train(env, 4)
     
-    torch.save(policy_net.state_dict(), "dqn_alien_model_30001")
+    torch.save(policy_net.state_dict(), "dqn_maze_model_11")
     
     # Load model
     # policy_net.load_state_dict(torch.load("dqn_alien_model_30001", map_location=device))
