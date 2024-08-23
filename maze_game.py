@@ -4,6 +4,9 @@ import random
 # Initialize Pygame
 pygame.init()
 
+# Set random seed for reproducibility
+random.seed(42)  # You can use any integer value for the seed
+
 # Constants
 SCREEN_WIDTH = 600
 SCREEN_HEIGHT = 650  # Increased height for timer display

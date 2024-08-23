@@ -10,7 +10,7 @@ SCREEN_HEIGHT = 650  # Increased height for timer display
 CELL_SIZE = 20
 MAZE_WIDTH = SCREEN_WIDTH // CELL_SIZE
 MAZE_HEIGHT = (SCREEN_HEIGHT - 50) // CELL_SIZE  # Adjusted height for timer display
-WHITE = (255, 255, 255)
+WHITE = (255, 255, 222)
 BLACK = (0, 0, 0)
 GREEN = (0, 255, 0)
 RED = (255, 0, 0)
@@ -113,6 +113,8 @@ class Maze:
 
         while running:
             for event in pygame.event.get():
+                print(self.get_screen_rgb())
+                print(self.get_screen_rgb().shape)
                 if event.type == pygame.QUIT:
                     running = False
                 elif event.type == pygame.KEYDOWN:
@@ -129,7 +131,6 @@ class Maze:
             self.draw_maze()
             self.player.draw(self.screen)
             self.timer.draw(self.screen)
-
             # Display the player's score
             score_text = self.font.render(f"Score: {self.player.score}", True, BLACK)
             self.screen.blit(score_text, (SCREEN_WIDTH - 150, 600))

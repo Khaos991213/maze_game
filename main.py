@@ -5,6 +5,7 @@ import math
 import random
 import numpy as np
 import time
+from PIL import Image
 
 import matplotlib.pyplot as plt
 import os
@@ -57,17 +58,22 @@ def optimize_model():
     transitions = memory.sample(BATCH_SIZE)
     batch = Transition(*zip(*transitions))
 
-    actions = torch.cat([torch.tensor([a], device=device) for a in batch.action])
-    rewards = torch.cat([torch.tensor([r], device=device) for r in batch.reward])
+    state_batch = torch.cat(batch.state).to(device)
+    action_batch = torch.cat(batch.action).to(device).view(-1, 1)  # Ensure shape [BATCH_SIZE, 1]
+    reward_batch = torch.cat(batch.reward).to(device)
+
+    # print("state_batch shape:", state_batch.shape)
+    # print("action_batch shape:", action_batch.shape)
 
     non_final_mask = torch.tensor([s is not None for s in batch.next_state], device=device, dtype=torch.bool)
     non_final_next_states = torch.cat([s for s in batch.next_state if s is not None]).to(device)
 
-    state_batch = torch.cat(batch.state).to(device)
-    action_batch = actions
-    reward_batch = rewards
+    state_action_values = policy_net(state_batch)
+    # print("state_action_values shape:", state_action_values.shape)
+    
+    # Ensure action_batch is correctly shaped
+    state_action_values = state_action_values.gather(1, action_batch)  # Gather the action values
 
-    state_action_values = policy_net(state_batch).gather(1, action_batch)
     next_state_values = torch.zeros(BATCH_SIZE, device=device)
     next_state_values[non_final_mask] = target_net(non_final_next_states).max(1)[0].detach()
     expected_state_action_values = (next_state_values * GAMMA) + reward_batch
@@ -96,21 +102,35 @@ def optimize_model():
 #     state = torch.from_numpy(state)
 #     return state.unsqueeze(0)
 
+def get_screen_rgb(env):
+    screen = env.get_screen_rgb( )
+    # Convert numpy array to PIL Image
+    screen = Image.fromarray(screen)
+
+    transform = T.Compose([
+        T.Resize((84, 84)),  
+        T.ToTensor(),  
+    ])
+    
+    screen = transform(screen)
+
+    return screen.unsqueeze(0).to(device)
+
 def get_state(obs, episode, save_image=False):
     # Extract the map information from the dictionary
     map_info = obs['maze']  # Assuming 'maze' key contains the map data
-    
     # Convert the 1D list to a 2D array (assuming you have MAZE_WIDTH and MAZE_HEIGHT defined)
     map_array = np.array(map_info).reshape((MAZE_HEIGHT, MAZE_WIDTH))
     
-    # Map values to colors if needed (for visualization purposes)
-    # This step depends on your actual use case. For now, we'll just normalize the map_array.
+    map_array = np.resize(map_array, (32, 32))  # Adjust this if necessary
+
     # Normalize the array to range [0, 1] if it's not already normalized
     normalized_map = map_array / np.max(map_array)
     
     # Convert to a tensor
     state = torch.tensor(normalized_map, dtype=torch.float).unsqueeze(0)  # Add batch dimension
-    
+    state = state.unsqueeze(0)  # Add channel dimension
+
     # Optional: Save the state as an image for visualization/debugging
     if save_image:
         plt.imshow(normalized_map, cmap='gray')  # Use 'gray' colormap for simplicity
@@ -127,8 +147,6 @@ def get_state(obs, episode, save_image=False):
 def train(env, n_episodes, render=False):
     for episode in range(n_episodes):
         obs = env.reset()
-        print(obs)
-        # Assuming obs is a single observation, not a tuple
         state = get_state(obs, episode, False)
         total_reward = 0.0
         for t in count():
@@ -143,6 +161,7 @@ def train(env, n_episodes, render=False):
             total_reward += reward
 
             if not done:
+                # next_state = get_screen_rgb(env) if not done else None
                 next_state = get_state(obs, episode, False)
             else:
                 next_state = None
@@ -239,7 +258,7 @@ if __name__ == '__main__':
     memory = ReplayMemory(MEMORY_SIZE)
     
     # Train model
-    train(env, 30001)
+    train(env, 1001)
     
     torch.save(policy_net.state_dict(), "dqn_alien_model_30001")
     
