@@ -49,11 +49,8 @@ class DQN(nn.Module):
         """
         super(DQN, self).__init__()
         self.conv1 = nn.Conv2d(in_channels, 32, kernel_size=8, stride=4)
-        # self.bn1 = nn.BatchNorm2d(32)
         self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2)
-        # self.bn2 = nn.BatchNorm2d(64)
         self.conv3 = nn.Conv2d(64, 64, kernel_size=3, stride=1)
-        # self.bn3 = nn.BatchNorm2d(64)
         ##self.feature_size = self._get_conv_out((3, 210, 160))
         self.fc4 = nn.Linear(7 * 7 * 64, 512)
         self.head = nn.Linear(512, n_actions)

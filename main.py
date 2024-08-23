@@ -244,7 +244,7 @@ if __name__ == '__main__':
     torch.save(policy_net.state_dict(), "dqn_alien_model_30001")
     
     # Load model
-    policy_net.load_state_dict(torch.load("dqn_alien_model_30001", map_location=device))
+    # policy_net.load_state_dict(torch.load("dqn_alien_model_30001", map_location=device))
     # path_array = test(env, 40, policy_net, render=False)
     
     # dis_graph = levenshtein_distance.PathDistanceCalculator().calculate_distances(path_array)
