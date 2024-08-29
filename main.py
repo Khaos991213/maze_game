@@ -1,16 +1,15 @@
-import copy
 from collections import namedtuple
 from itertools import count
+import matplotlib.pyplot as plt
+import numpy as np
 import math
 import random
-import numpy as np
 import time
-from PIL import Image
-
-import matplotlib.pyplot as plt
 import os
+
 from memory import ReplayMemory
-from models import DQN, DQNbn  # Adjust based on your actual model definitions
+from models import DQN, DQN_small_maze  # Adjust based on your actual model definitions
+from game_small import Maze
 
 import torch
 import torch.nn as nn
@@ -21,14 +20,14 @@ import torchvision.transforms as T
 import data
 # import levenshtein_distance
 # import optics
-from game import Maze, Player, Timer
+
 
 Transition = namedtuple('Transition', 
                         ('state', 'action', 'next_state', 'reward'))
 
 # Constants
-SCREEN_WIDTH = 600
-SCREEN_HEIGHT = 650  # Increased height for timer display
+SCREEN_WIDTH = 320
+SCREEN_HEIGHT = 370 
 CELL_SIZE = 20
 MAZE_WIDTH = SCREEN_WIDTH // CELL_SIZE
 MAZE_HEIGHT = (SCREEN_HEIGHT - 50) // CELL_SIZE  # Adjusted height for timer display
@@ -46,11 +45,17 @@ def select_action(state):
     eps_threshold = EPS_END + (EPS_START - EPS_END) * \
         math.exp(-1. * steps_done / EPS_DECAY)
     steps_done += 1
+    
     if sample > eps_threshold:
         with torch.no_grad():
-            return policy_net(state.to(device)).max(1)[1].view(1, 1)
+            action = policy_net(state.to(device)).max(1)[1].view(1, 1)
     else:
-        return torch.tensor([[random.randrange(n_actions)]], device=device, dtype=torch.long)
+        action = torch.tensor([[random.randrange(n_actions)]], device=device, dtype=torch.long)
+    
+    # Log the selected action
+    #print(f"Step {steps_done}, Epsilon: {eps_threshold:.4f}, Selected action: {action.item()}")
+    
+    return action
 
 def optimize_model():
     if len(memory) < BATCH_SIZE:
@@ -86,54 +91,19 @@ def optimize_model():
     optimizer.step()
     return loss.item()
 
-# def get_state(obs, ep, p):
-#     state = np.array(obs)
-#     print("Shape of obs:", np.array(obs).shape)
-
-#     if p:
-#         plt.imshow(state)
-#         filename = f'./temp/{ep}/{steps_done}.png'
-#         dir = os.path.dirname(filename)
-#         if dir and not os.path.exists(dir):
-#             os.makedirs(dir)
-#         plt.savefig(filename)
-#         plt.close()
-#     state = state.transpose((2, 0, 1))
-#     state = torch.from_numpy(state)
-#     return state.unsqueeze(0)
-
-def get_screen_rgb(env):
-    screen = env.get_screen_rgb( )
-    # Convert numpy array to PIL Image
-    screen = Image.fromarray(screen)
-
-    transform = T.Compose([
-        T.Resize((84, 84)),  
-        T.ToTensor(),  
-    ])
-    
-    screen = transform(screen)
-
-    return screen.unsqueeze(0).to(device)
-
 def get_state(obs, episode, save_image=False):
-    # Extract the map information from the dictionary
-    map_info = obs['maze']  # Assuming 'maze' key contains the map data
-    # Convert the 1D list to a 2D array (assuming you have MAZE_WIDTH and MAZE_HEIGHT defined)
+    map_info = obs['maze'] 
+    #-->地圖資訊
     map_array = np.array(map_info).reshape((MAZE_HEIGHT, MAZE_WIDTH))
-    
-    map_array = np.resize(map_array, (32, 32))  # Adjust this if necessary
+    map_array = np.resize(map_array, (32, 32))
 
-    # Normalize the array to range [0, 1] if it's not already normalized
     normalized_map = map_array / np.max(map_array)
     
-    # Convert to a tensor
-    state = torch.tensor(normalized_map, dtype=torch.float).unsqueeze(0)  # Add batch dimension
-    state = state.unsqueeze(0)  # Add channel dimension
+    state = torch.tensor(normalized_map, dtype=torch.float).unsqueeze(0) 
+    state = state.unsqueeze(0) 
 
-    # Optional: Save the state as an image for visualization/debugging
     if save_image:
-        plt.imshow(normalized_map, cmap='gray')  # Use 'gray' colormap for simplicity
+        plt.imshow(normalized_map, cmap='gray')
         filename = f'./temp/{episode}/{steps_done}.png'
         dir = os.path.dirname(filename)
         if dir and not os.path.exists(dir):
@@ -145,22 +115,19 @@ def get_state(obs, episode, save_image=False):
 
 
 def train(env, n_episodes, render=False):
-    all_losses = []  # List to store loss values for each episode
-    
+    all_losses = []
     for episode in range(n_episodes):
         obs = env.reset()
         state = get_state(obs, episode, False)
         total_reward = 0.0
-        episode_loss = 0.0  # Initialize loss tracking for this episode
-        
+        episode_loss = 0.0
+             
         for t in count():
             action = select_action(state)
-
             if render:
-                env.render()
-
-            obs, reward, done = env.step(action)  # Adjusted for 4 values return
-            
+                 env.render()
+            obs, reward, done = env.step(action.item())
+            #print(f"Episode {episode}, Step {t}, Reward: {reward}")
             total_reward += reward
 
             if not done:
@@ -176,7 +143,7 @@ def train(env, n_episodes, render=False):
             if steps_done > INITIAL_MEMORY:
                 loss = optimize_model()
                 if loss is not None:
-                    episode_loss += loss  # Accumulate loss
+                    episode_loss += loss
 
                 if steps_done % TARGET_UPDATE == 0:
                     target_net.load_state_dict(policy_net.state_dict())
@@ -185,9 +152,9 @@ def train(env, n_episodes, render=False):
                 break
         
         avg_loss = episode_loss / (t + 1) if t > 0 else 0
-        all_losses.append(avg_loss)  # Store the average loss for this episode
-
-        print(f'Episode {episode}/{n_episodes} \t Total steps: {steps_done} \t Total reward: {total_reward} \t Average loss: {avg_loss:.4f}')
+        all_losses.append(avg_loss)
+        reward_list.append(total_reward)
+        print(f'Episode {episode}/{n_episodes} \t Total reward: {total_reward} \t Average loss: {avg_loss:.4f}')
     
     env.close()
     
@@ -199,18 +166,32 @@ def train(env, n_episodes, render=False):
     plt.title('Loss per Episode')
     plt.legend()
     plt.grid(True)
-    plt.savefig('loss_per_episode.png')  # Save plot as an image file
-    plt.show()
+    plt.savefig('loss_per_episode_S1001.png')  # Save plot as an image file
 
-def test(env, n_episodes, policy, render=True):
+
+    # Assuming you have a list `all_rewards` that tracks the rewards per episode
+    plt.figure(figsize=(10, 5))
+    plt.plot(range(n_episodes),reward_list, label='Reward')  # Use all_rewards instead of all_losses
+    plt.xlabel('Episode')
+    plt.ylabel('Reward')
+    plt.title('Reward per Episode')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig('reward_per_episode_S1001.png')  # Save plot as an image file
+
+
+def test(env, n_episodes, policy, render=True, device='cpu'):
     path_array = []
     global steps_done
+    policy.to(device)  # Move policy network to the specified device
+
     for episode in range(n_episodes):
         path_array.append(data.dat())
         obs = env.reset()
-        state = get_state(obs[0], episode, False)
+        state = get_state(obs, episode, False).to(device)  # Ensure state is on the same device as the policy
         path_array[episode].AddState(state.float())
         total_reward = 0.0
+        #obs['maze']可以拿到地圖資訊
         for t in count():
             action = policy(state).max(1)[1].view(1, 1)
             path_array[episode].AddAction(action)
@@ -219,12 +200,12 @@ def test(env, n_episodes, policy, render=True):
                 env.render()
                 time.sleep(0.02)
 
-            obs, reward, done, _ = env.step(action.item())  # Ensure action is a single item integer
+            obs, reward, done = env.step(action.item())
 
             total_reward += reward
 
             if not done:
-                next_state = get_state(obs, episode, False)
+                next_state = get_state(obs, episode, False).to(device)  # Ensure next_state is on the same device as the policy
                 path_array[episode].AddState(next_state.float())
             else:
                 next_state = None
@@ -259,15 +240,15 @@ if __name__ == '__main__':
     INITIAL_MEMORY = 10000
     MEMORY_SIZE = 10 * INITIAL_MEMORY
     
-    # Create environment
-    env = Maze(countdown_time=60)
+    # rendering_enabled 選擇要不要顯示
+    env = Maze(countdown_time=30,rendering_enabled=True)
     
     # Define the number of actions in your environment
     n_actions = 4  # Adjust this based on your environment's action space
 
     # Create networks
-    policy_net = DQN(n_actions=n_actions).to(device)
-    target_net = DQN(n_actions=n_actions).to(device)
+    policy_net = DQN_small_maze(n_actions=n_actions).to(device)
+    target_net = DQN_small_maze(n_actions=n_actions).to(device)
     target_net.load_state_dict(policy_net.state_dict())
 
     # Setup optimizer
@@ -278,13 +259,12 @@ if __name__ == '__main__':
     memory = ReplayMemory(MEMORY_SIZE)
     
     # Train model
-    train(env, 4)
-    
-    torch.save(policy_net.state_dict(), "dqn_maze_model_11")
+    #train(env, 1001)
+    #torch.save(policy_net.state_dict(), "dqn_Smaze_model_1001")
     
     # Load model
-    # policy_net.load_state_dict(torch.load("dqn_alien_model_30001", map_location=device))
-    # path_array = test(env, 40, policy_net, render=False)
+    policy_net.load_state_dict(torch.load("dqn_Smaze_model_500", map_location=device))
+    path_array = test(env, 40, policy_net, render=False)
     
     # dis_graph = levenshtein_distance.PathDistanceCalculator().calculate_distances(path_array)
     # print(dis_graph)
